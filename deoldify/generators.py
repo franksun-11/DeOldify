@@ -5,21 +5,33 @@ from fastai.torch_core import SplitFuncOrIdxList, apply_init, to_device
 from fastai.vision import *
 from fastai.vision.learner import cnn_config, create_body
 from torch import nn
+import torch
+import functools
+from pathlib import Path
+from typing import Callable, Optional, Tuple, Any
+
 from .unet import DynamicUnetWide, DynamicUnetDeep
 from .dataset import *
 
+def load_weights_with_safe_globals(learn: Learner, weights_path: Path):
+    # 注册 functools.partial 以支持安全加载
+    torch.serialization.add_safe_globals([functools.partial])
+    state_dict = torch.load(weights_path, map_location='cpu', weights_only=False)
+    learn.model.load_state_dict(state_dict)
+
 # Weights are implicitly read from ./models/ folder
 def gen_inference_wide(
-    root_folder: Path, weights_name: str, nf_factor: int = 2, arch=models.resnet101) -> Learner:
+    root_folder: Path, weights_name: str, nf_factor: int = 2, arch=models.resnet101
+) -> Learner:
     data = get_dummy_databunch()
     learn = gen_learner_wide(
         data=data, gen_loss=F.l1_loss, nf_factor=nf_factor, arch=arch
     )
     learn.path = root_folder
-    learn.load(weights_name)
+    weights_path = learn.path / "models" / f"{weights_name}.pth"
+    load_weights_with_safe_globals(learn, weights_path)
     learn.model.eval()
     return learn
-
 
 def gen_learner_wide(
     data: ImageDataBunch, gen_loss, arch=models.resnet101, nf_factor: int = 2
@@ -36,8 +48,6 @@ def gen_learner_wide(
         nf_factor=nf_factor,
     )
 
-
-# The code below is meant to be merged into fastaiv1 ideally
 def unet_learner_wide(
     data: DataBunch,
     arch: Callable,
@@ -81,18 +91,18 @@ def unet_learner_wide(
 
 # ----------------------------------------------------------------------
 
-# Weights are implicitly read from ./models/ folder
 def gen_inference_deep(
-    root_folder: Path, weights_name: str, arch=models.resnet34, nf_factor: float = 1.5) -> Learner:
+    root_folder: Path, weights_name: str, arch=models.resnet34, nf_factor: float = 1.5
+) -> Learner:
     data = get_dummy_databunch()
     learn = gen_learner_deep(
         data=data, gen_loss=F.l1_loss, arch=arch, nf_factor=nf_factor
     )
     learn.path = root_folder
-    learn.load(weights_name)
+    weights_path = learn.path / "models" / f"{weights_name}.pth"
+    load_weights_with_safe_globals(learn, weights_path)
     learn.model.eval()
     return learn
-
 
 def gen_learner_deep(
     data: ImageDataBunch, gen_loss, arch=models.resnet34, nf_factor: float = 1.5
@@ -109,8 +119,6 @@ def gen_learner_deep(
         nf_factor=nf_factor,
     )
 
-
-# The code below is meant to be merged into fastaiv1 ideally
 def unet_learner_deep(
     data: DataBunch,
     arch: Callable,
@@ -151,5 +159,3 @@ def unet_learner_deep(
     apply_init(model[2], nn.init.kaiming_normal_)
     return learn
 
-
-# -----------------------------
